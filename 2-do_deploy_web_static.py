@@ -1,77 +1,61 @@
 #!/usr/bin/python3
-"""Comment"""
-from fabric.api import *
+"""A module for web application deployment with Fabric."""
 import os
-import re
 from datetime import datetime
+from fabric.api import env, local, put, run, runs_once
 
+
+# List of host server IP addresses
+env.hosts = ["50.19.38.164", "35.175.220.32"]
 env.user = 'ubuntu'
-env.hosts = ['3.80.74.138', '3.88.68.105']
 
 
+@runs_once
 def do_pack():
-    """Comm"""
-    local("mkdir -p versions")
-    result = local("tar -cvzf versions/web_static_{}.tgz web_static"
-                   .format(datetime.strftime(datetime.now(), "%Y%m%d%H%M%S")),
-                   capture=True)
-    if result.failed:
-        return None
-    return result
+    """Archives the static files."""
+    if not os.path.isdir("versions"):
+        os.mkdir("versions")
+    cur_time = datetime.now()
+    output = "versions/web_static_{}{}{}{}{}{}.tgz".format(
+        cur_time.year,
+        cur_time.month,
+        cur_time.day,
+        cur_time.hour,
+        cur_time.minute,
+        cur_time.second
+    )
+    try:
+        print("Packing web_static to {}".format(output))
+        local("tar -cvzf {} web_static".format(output))
+        archize_size = os.stat(output).st_size
+        print("web_static packed: {} -> {} Bytes".format(output, archize_size))
+    except Exception:
+        output = None
+    return output
 
 
 def do_deploy(archive_path):
-    """Comment"""
-    if not os.path.isfile(archive_path):
+    """Deploys the static files to the host servers.
+    Args:
+        archive_path (str): The path to the archived static files.
+    """
+    if not os.path.exists(archive_path):
         return False
-
-    filename_regex = re.compile(r'[^/]+(?=\.tgz$)')
-    match = filename_regex.search(archive_path)
-
-    # Upload the archive to the /tmp/ directory of the web server
-    archive_filename = match.group(0)
-    result = put(archive_path, "/tmp/{}.tgz".format(archive_filename))
-    if result.failed:
-        return False
-    # Uncompress the archive to the folder
-    #     /data/web_static/releases/<archive filename without extension> on
-    #     the web server
-
-    result = run(
-        "mkdir -p /data/web_static/releases/{}/".format(archive_filename))
-    if result.failed:
-        return False
-    result = run("tar -xzf /tmp/{}.tgz -C /data/web_static/releases/{}/"
-                 .format(archive_filename, archive_filename))
-    if result.failed:
-        return False
-
-    # Delete the archive from the web server
-    result = run("rm /tmp/{}.tgz".format(archive_filename))
-    if result.failed:
-        return False
-    result = run("mv /data/web_static/releases/{}"
-                 "/web_static/* /data/web_static/releases/{}/"
-                 .format(archive_filename, archive_filename))
-    if result.failed:
-        return False
-    result = run("rm -rf /data/web_static/releases/{}/web_static"
-                 .format(archive_filename))
-    if result.failed:
-        return False
-
-    # Delete the symbolic link /data/web_static/current from the web server
-    result = run("rm -rf /data/web_static/current")
-    if result.failed:
-        return False
-
-    #  Create a new the symbolic link
-    #  /data/web_static/current on the web server,
-    #     linked to the new version of your code
-    #     (/data/web_static/releases/<archive filename without extension>)
-    result = run("ln -s /data/web_static/releases/{}/ /data/web_static/current"
-                 .format(archive_filename))
-    if result.failed:
-        return False
-
-    return True
+    file_name = os.path.basename(archive_path)
+    folder_name = file_name.replace(".tgz", "")
+    folder_path = "/data/web_static/releases/{}/".format(folder_name)
+    success = False
+    try:
+        put(archive_path, "/tmp/{}".format(file_name))
+        run("mkdir -p {}".format(folder_path))
+        run("tar -xzf /tmp/{} -C {}".format(file_name, folder_path))
+        run("rm -rf /tmp/{}".format(file_name))
+        run("mv {}web_static/* {}".format(folder_path, folder_path))
+        run("rm -rf {}web_static".format(folder_path))
+        run("rm -rf /data/web_static/current")
+        run("ln -s {} /data/web_static/current".format(folder_path))
+        print('New version deployed!')
+        success = True
+    except Exception:
+        success = False
+    return success
