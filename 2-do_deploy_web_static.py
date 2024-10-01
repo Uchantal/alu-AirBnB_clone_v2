@@ -6,7 +6,7 @@ from fabric.api import env, local, put, run, runs_once
 
 
 # List of host server IP addresses
-env.hosts = ["50.19.38.164", "35.175.220.32"]
+env.hosts = ["54.82.87.226", "34.229.16.34"]
 env.user = 'ubuntu'
 
 
