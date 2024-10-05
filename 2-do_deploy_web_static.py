@@ -1,30 +1,44 @@
-#!/usr/bin/python3
-"""
-Fabric script based on the file 1-pack_web_static.py that distributes an
-archive to the web servers
-"""
-
-from fabric.api import put, run, env
+from fabric import Connection
+from invoke import task
 from os.path import exists
-env.hosts = ['54.82.87.226', '34.229.16.34']
 
+# Define your hosts and user information
+hosts = ['54.82.87.226', '34.229.16.34']
+user = 'ubuntu'
+key_filename = '~/.ssh/id_rsa'
 
-def do_deploy(archive_path):
-    """distributes an archive to the web servers"""
-    if exists(archive_path) is False:
+@task
+def do_deploy(c, archive_path):
+    """Distributes an archive to the web servers."""
+    if not exists(archive_path):
+        print("File does not exist!")
         return False
+
     try:
-        file_n = archive_path.split("/")[-1]
-        no_ext = file_n.split(".")[0]
-        path = "/data/web_static/releases/"
-        put(archive_path, '/tmp/')
-        run('mkdir -p {}{}/'.format(path, no_ext))
-        run('tar -xzf /tmp/{} -C {}{}/'.format(file_n, path, no_ext))
-        run('rm /tmp/{}'.format(file_n))
-        run('mv {0}{1}/web_static/* {0}{1}/'.format(path, no_ext))
-        run('rm -rf {}{}/web_static'.format(path, no_ext))
-        run('rm -rf /data/web_static/current')
-        run('ln -s {}{}/ /data/web_static/current'.format(path, no_ext))
+        archive_file = archive_path.split("/")[-1]
+        no_ext = archive_file.split(".")[0]
+        release_folder = f"/data/web_static/releases/{no_ext}/"
+
+        for host in hosts:
+            conn = Connection(host=host, user=user, connect_kwargs={"key_filename": key_filename})
+            
+            # Upload the archive to the /tmp/ directory
+            conn.put(archive_path, "/tmp/")
+            
+            # Uncompress the archive to the release folder
+            conn.run(f"mkdir -p {release_folder}")
+            conn.run(f"tar -xzf /tmp/{archive_file} -C {release_folder}")
+            conn.run(f"rm /tmp/{archive_file}")
+            
+            # Move the web_static contents and set up the symbolic link
+            conn.run(f"mv {release_folder}web_static/* {release_folder}")
+            conn.run(f"rm -rf {release_folder}web_static")
+            conn.run(f"rm -rf /data/web_static/current")
+            conn.run(f"ln -s {release_folder} /data/web_static/current")
+        
+        print("New version deployed successfully!")
         return True
-    except:
+
+    except Exception as e:
+        print(f"Deployment failed: {e}")
         return False
