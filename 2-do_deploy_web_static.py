@@ -1,17 +1,18 @@
-from fabric import Connection
-from invoke import task
+# 2-do_deploy_web_static.py
+from fabric import task
+from fabric.connection import Connection
+from invoke.exceptions import UnexpectedExit
 from os.path import exists
 
-# Define your hosts and user information
-hosts = ['54.82.87.226', '34.229.16.34']
-user = 'ubuntu'
-key_filename = '~/.ssh/id_rsa'
+env_hosts = ['54.82.87.226', '34.229.16.34']  # List of your server IPs
+env_user = 'ubuntu'
+env_key_filename = '~/.ssh/id_rsa'
 
 @task
 def do_deploy(c, archive_path):
-    """Distributes an archive to the web servers."""
+    """Distribute archive to web servers"""
     if not exists(archive_path):
-        print("File does not exist!")
+        print("Archive path does not exist.")
         return False
 
     try:
@@ -19,26 +20,25 @@ def do_deploy(c, archive_path):
         no_ext = archive_file.split(".")[0]
         release_folder = f"/data/web_static/releases/{no_ext}/"
 
-        for host in hosts:
-            conn = Connection(host=host, user=user, connect_kwargs={"key_filename": key_filename})
-            
-            # Upload the archive to the /tmp/ directory
-            conn.put(archive_path, "/tmp/")
-            
-            # Uncompress the archive to the release folder
-            conn.run(f"mkdir -p {release_folder}")
-            conn.run(f"tar -xzf /tmp/{archive_file} -C {release_folder}")
-            conn.run(f"rm /tmp/{archive_file}")
-            
-            # Move the web_static contents and set up the symbolic link
-            conn.run(f"mv {release_folder}web_static/* {release_folder}")
-            conn.run(f"rm -rf {release_folder}web_static")
-            conn.run(f"rm -rf /data/web_static/current")
-            conn.run(f"ln -s {release_folder} /data/web_static/current")
-        
+        # Upload the archive to the /tmp/ directory on the server
+        c.put(archive_path, "/tmp/")
+
+        # Uncompress the archive
+        c.run(f"mkdir -p {release_folder}")
+        c.run(f"tar -xzf /tmp/{archive_file} -C {release_folder}")
+        c.run(f"rm /tmp/{archive_file}")
+
+        # Move the contents from web_static folder to release folder
+        c.run(f"mv {release_folder}web_static/* {release_folder}")
+        c.run(f"rm -rf {release_folder}web_static")
+
+        # Delete the old symbolic link and create a new one
+        c.run("rm -rf /data/web_static/current")
+        c.run(f"ln -s {release_folder} /data/web_static/current")
+
         print("New version deployed successfully!")
         return True
 
-    except Exception as e:
+    except UnexpectedExit as e:
         print(f"Deployment failed: {e}")
         return False
