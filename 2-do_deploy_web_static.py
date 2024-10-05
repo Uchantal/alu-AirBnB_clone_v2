@@ -1,44 +1,30 @@
-# 2-do_deploy_web_static.py
-from fabric import task
-from fabric.connection import Connection
-from invoke.exceptions import UnexpectedExit
+#!/usr/bin/python3
+"""
+Fabric script based on the file 1-pack_web_static.py that distributes an
+archive to the web servers
+"""
+
+from fabric.api import put, run, env
 from os.path import exists
+env.hosts = ['34.229.90.85', '54.162.186.5']
 
-env_hosts = ['54.82.87.226', '34.229.16.34']  # List of your server IPs
-env_user = 'ubuntu'
-env_key_filename = '~/.ssh/id_rsa'
 
-@task
-def do_deploy(c, archive_path):
-    """Distribute archive to web servers"""
-    if not exists(archive_path):
-        print("Archive path does not exist.")
+def do_deploy(archive_path):
+    """distributes an archive to the web servers"""
+    if exists(archive_path) is False:
         return False
-
     try:
-        archive_file = archive_path.split("/")[-1]
-        no_ext = archive_file.split(".")[0]
-        release_folder = f"/data/web_static/releases/{no_ext}/"
-
-        # Upload the archive to the /tmp/ directory on the server
-        c.put(archive_path, "/tmp/")
-
-        # Uncompress the archive
-        c.run(f"mkdir -p {release_folder}")
-        c.run(f"tar -xzf /tmp/{archive_file} -C {release_folder}")
-        c.run(f"rm /tmp/{archive_file}")
-
-        # Move the contents from web_static folder to release folder
-        c.run(f"mv {release_folder}web_static/* {release_folder}")
-        c.run(f"rm -rf {release_folder}web_static")
-
-        # Delete the old symbolic link and create a new one
-        c.run("rm -rf /data/web_static/current")
-        c.run(f"ln -s {release_folder} /data/web_static/current")
-
-        print("New version deployed successfully!")
+        file_n = archive_path.split("/")[-1]
+        no_ext = file_n.split(".")[0]
+        path = "/data/web_static/releases/"
+        put(archive_path, '/tmp/')
+        run('mkdir -p {}{}/'.format(path, no_ext))
+        run('tar -xzf /tmp/{} -C {}{}/'.format(file_n, path, no_ext))
+        run('rm /tmp/{}'.format(file_n))
+        run('mv {0}{1}/web_static/* {0}{1}/'.format(path, no_ext))
+        run('rm -rf {}{}/web_static'.format(path, no_ext))
+        run('rm -rf /data/web_static/current')
+        run('ln -s {}{}/ /data/web_static/current'.format(path, no_ext))
         return True
-
-    except UnexpectedExit as e:
-        print(f"Deployment failed: {e}")
+    except:
         return False
